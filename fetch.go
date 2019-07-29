@@ -53,6 +53,7 @@ func New(options ...interface{}) *Fetch {
 
 // Get 获得数据
 func (fetch *Fetch) Get(u string, params ...interface{}) (buf []byte, err error) {
+	core.Dump(56, params)
 	req := new(http.Request)
 	addr := new(url.URL)
 	addr, err = url.Parse(u)
@@ -88,7 +89,18 @@ func (fetch *Fetch) setHeaders(headers map[string]string) {
 // Get 获得数据
 func Get(u string, params ...interface{}) ([]byte, error) {
 	fetch := New()
-	return fetch.Get(u, params)
+	query := make(map[string]string)
+	if len(params) > 0 {
+		for key, item := range params[0].(map[string]interface{}) {
+			switch key {
+			case "headers":
+				fetch.setHeaders(item.(map[string]string))
+			case "params":
+				query = item.(map[string]string)
+			}
+		}
+	}
+	return fetch.Get(u, query)
 }
 
 // ProxyGet 配置代理采集

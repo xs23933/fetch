@@ -7,14 +7,14 @@ import (
 )
 
 func Test_Fetch(t *testing.T) {
-	fetch := New(map[string]interface{}{
+	w := New(map[string]interface{}{
 		"proxy": "http://127.0.0.1:8888",
 		"headers": map[string]string{
 			"author": "Beasr ",
 		},
 	})
 
-	buf, err := fetch.Payload("https://hk.nt5.net/api/authorize", map[string]string{
+	buf, err := w.Payload("https://hk.nt5.net/api/authorize", map[string]interface{}{
 		"user":     "admin",
 		"password": "admin",
 	})
@@ -26,7 +26,7 @@ func Test_Fetch(t *testing.T) {
 }
 
 func Test_Proxy(t *testing.T) {
-	buf, _ := ProxyPayload("https://hk.nt5.net/api/authorize", "http://127.0.0.1:8888", map[string]string{
+	buf, _ := ProxyPayload("https://hk.nt5.net/api/authorize", "http://127.0.0.1:8888", map[string]interface{}{
 		"user":     "admin",
 		"password": "admin",
 	})
@@ -37,7 +37,7 @@ func Test_Proxy(t *testing.T) {
 //   params 是请求参数
 //   headers 头信息
 func Test_get(t *testing.T) {
-	buf, _ := ProxyGet("https://hk.nt5.net/api/user/info", "http://127.0.0.1:8888", map[string]interface{}{
+	buf, _ := Get("https://hk.nt5.net/api/user/info", map[string]interface{}{
 		"params": map[string]string{
 			"hello": "world",
 		},
