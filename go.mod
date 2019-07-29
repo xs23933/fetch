@@ -1,4 +1,4 @@
-module fetch
+module github.com/xs23933/fetch
 
 go 1.12
 
