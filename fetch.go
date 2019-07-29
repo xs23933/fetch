@@ -85,6 +85,12 @@ func (fetch *Fetch) setHeaders(headers map[string]string) {
 	}
 }
 
+// Get 获得数据
+func Get(u string, params ...interface{}) ([]byte, error) {
+	fetch := New()
+	return fetch.Get(u, params)
+}
+
 // ProxyGet 配置代理采集
 //  u       string                 网址
 //  proxy   string                 代理网址 http://127.0.0.1:8080
