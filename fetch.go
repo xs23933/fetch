@@ -53,7 +53,6 @@ func New(options ...interface{}) *Fetch {
 
 // Get 获得数据
 func (fetch *Fetch) Get(u string, params ...interface{}) (buf []byte, err error) {
-	core.Dump(56, params)
 	req := new(http.Request)
 	addr := new(url.URL)
 	addr, err = url.Parse(u)
