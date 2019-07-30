@@ -32,7 +32,7 @@ func New(options ...interface{}) *Fetch {
 		Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}},
 		headers:   make(map[string]string),
 	}
-	core.Log("Init Fetch")
+
 	if options != nil {
 		for k, v := range options[0].(map[string]interface{}) {
 			switch k {
@@ -224,7 +224,6 @@ func (fetch *Fetch) do(req *http.Request) (buf []byte, err error) {
 		req.Header.Set(k, v)
 	}
 	if fetch.client == nil {
-		core.Log("make client")
 		fetch.client = &http.Client{
 			Jar:       fetch.Jar,
 			Transport: fetch.Transport,
