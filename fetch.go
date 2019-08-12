@@ -9,6 +9,7 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/xs23933/core"
 )
@@ -21,6 +22,7 @@ type Fetch struct {
 	Transport *http.Transport
 	client    *http.Client
 	headers   map[string]string
+	Timeout   time.Duration
 }
 
 // New New fetch
@@ -31,6 +33,7 @@ func New(options ...interface{}) *Fetch {
 		Jar:       jar,
 		Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}},
 		headers:   make(map[string]string),
+		Timeout:   0,
 	}
 
 	if options != nil {
@@ -45,6 +48,8 @@ func New(options ...interface{}) *Fetch {
 				}
 			case "headers":
 				fetch.setHeaders(v.(map[string]string))
+			case "Timeout":
+				fetch.Timeout = v.(time.Duration)
 			}
 		}
 	}
@@ -225,6 +230,7 @@ func (fetch *Fetch) do(req *http.Request) (buf []byte, err error) {
 	}
 	if fetch.client == nil {
 		fetch.client = &http.Client{
+			Timeout:   fetch.Timeout,
 			Jar:       fetch.Jar,
 			Transport: fetch.Transport,
 		}
