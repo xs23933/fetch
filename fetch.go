@@ -238,7 +238,7 @@ func (fetch *Fetch) do(req *http.Request) (buf []byte, err error) {
 	resp := new(http.Response)
 	resp, err = fetch.client.Do(req)
 	if err != nil {
-		core.Log("Request failed %v", err)
+		// core.Log("Request failed %v", err)
 		return
 	}
 	defer resp.Body.Close()
