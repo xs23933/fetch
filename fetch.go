@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
-	"net/http/cookiejar"
 	"net/url"
 	"strings"
 	"time"
@@ -27,7 +26,7 @@ type Fetch struct {
 
 // New New fetch
 func New(options ...interface{}) *Fetch {
-	jar, _ := cookiejar.New(nil)
+	jar, _ := NewCookieJar()
 	fetch := &Fetch{
 		UserAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/68.0.3440.84 Safari/537.36",
 		Jar:       jar,
