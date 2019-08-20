@@ -17,7 +17,7 @@ import (
 type Fetch struct {
 	Proxy     string
 	UserAgent string
-	Jar       *CookieJar
+	Jar       http.CookieJar
 	Transport *http.Transport
 	client    *http.Client
 	headers   map[string]string
