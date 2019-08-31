@@ -2,15 +2,18 @@ package fetch
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
 	"github.com/xs23933/core"
+	"golang.org/x/net/proxy"
 )
 
 // Fetch http client
@@ -22,6 +25,34 @@ type Fetch struct {
 	client    *http.Client
 	headers   map[string]string
 	Timeout   time.Duration
+}
+
+type dialer struct {
+	addr   string
+	socks5 proxy.Dialer
+}
+
+func (d *dialer) DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
+	return d.Dial(network, addr)
+}
+
+func (d *dialer) Dial(network, addr string) (net.Conn, error) {
+	var err error
+	if d.socks5 == nil {
+		d.socks5, err = proxy.SOCKS5("tcp", d.addr, nil, proxy.Direct)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return d.socks5.Dial(network, addr)
+}
+
+func Socks5Proxy(addr string) *http.Transport {
+	d := &dialer{addr: addr}
+	return &http.Transport{
+		DialContext: d.DialContext,
+		Dial:        d.Dial,
+	}
 }
 
 // New New fetch
@@ -43,7 +74,11 @@ func New(options ...interface{}) *Fetch {
 			case "proxy": // 配置代理
 				proxy, err := url.Parse(v.(string))
 				if err == nil {
-					fetch.Transport.Proxy = http.ProxyURL(proxy)
+					if proxy.Scheme == "http" {
+						fetch.Transport.Proxy = http.ProxyURL(proxy)
+					} else {
+						fetch.Transport = Socks5Proxy(proxy.Host)
+					}
 				}
 			case "headers":
 				fetch.setHeaders(v.(map[string]string))
