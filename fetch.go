@@ -201,6 +201,18 @@ func ProxyPayload(u, proxy string, params map[string]interface{}, headers ...int
 	return fetch.Payload(u, params)
 }
 
+// Payload 代理Post请求
+//  u       string                 网址
+//  params  map[string]interface{} 请求json数据
+//  headers map[string]string      可配置header在里面
+func Payload(u string, params map[string]interface{}, headers ...interface{}) ([]byte, error) {
+	fetch := New()
+	if len(headers) > 0 {
+		fetch.setHeaders(headers[0].(map[string]string))
+	}
+	return fetch.Payload(u, params)
+}
+
 // Post Post 数据
 //  u       string                 网址
 //  proxy   string                 代理网址 http://127.0.0.1:8080
