@@ -250,6 +250,12 @@ func (fetch *Fetch) Payload(u string, params map[string]interface{}, header ...i
 		core.Log(err.Error())
 		return
 	}
+
+	// 设置头信息
+	if headers != nil {
+		fetch.setHeaders(headers[0].(map[string]string))
+	}
+
 	param := bytes.NewBuffer(js)
 	req, err = http.NewRequest("POST", addr.String(), param)
 	buf, err = fetch.do(req)
