@@ -235,7 +235,7 @@ func (fetch *Fetch) Post(u string, params map[string]string, headers ...interfac
 //  u       string                 网址
 //  params  map[string]interface{} 请求json数据
 //  headers map[string]string      可配置header在里面
-func (fetch *Fetch) Payload(u string, params map[string]interface{}, header ...interface{}) (buf []byte, err error) {
+func (fetch *Fetch) Payload(u string, params map[string]interface{}, headers ...interface{}) (buf []byte, err error) {
 	req := new(http.Request)
 	addr := new(url.URL)
 	addr, err = url.Parse(u)
