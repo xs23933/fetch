@@ -52,7 +52,7 @@ func Socks5Proxy(addr string) *http.Transport {
 	return &http.Transport{
 		DialContext:       d.DialContext,
 		Dial:              d.Dial,
-		DisableKeepAlives: false,
+		DisableKeepAlives: true,
 	}
 }
 
@@ -64,7 +64,7 @@ func New(options ...interface{}) *Fetch {
 		Jar:       jar,
 		Transport: &http.Transport{
 			TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
-			DisableKeepAlives: false,
+			DisableKeepAlives: true,
 		},
 		headers: make(map[string]string),
 		Timeout: 0,
