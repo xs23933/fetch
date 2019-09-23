@@ -50,8 +50,9 @@ func (d *dialer) Dial(network, addr string) (net.Conn, error) {
 func Socks5Proxy(addr string) *http.Transport {
 	d := &dialer{addr: addr}
 	return &http.Transport{
-		DialContext: d.DialContext,
-		Dial:        d.Dial,
+		DialContext:       d.DialContext,
+		Dial:              d.Dial,
+		DisableKeepAlives: false,
 	}
 }
 
@@ -61,9 +62,12 @@ func New(options ...interface{}) *Fetch {
 	fetch := &Fetch{
 		UserAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/68.0.3440.84 Safari/537.36",
 		Jar:       jar,
-		Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}},
-		headers:   make(map[string]string),
-		Timeout:   0,
+		Transport: &http.Transport{
+			TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
+			DisableKeepAlives: false,
+		},
+		headers: make(map[string]string),
+		Timeout: 0,
 	}
 
 	if options != nil {
@@ -201,6 +205,18 @@ func ProxyPayload(u, proxy string, params map[string]interface{}, headers ...int
 	return fetch.Payload(u, params)
 }
 
+// Post 代理post
+//  u       string                 网址
+//  params  map[string]interface{} 请求json数据
+//  headers map[string]string      可配置header在里面
+func Post(u string, params map[string]string, headers ...interface{}) ([]byte, error) {
+	fetch := New(map[string]interface{}{})
+	if len(headers) > 0 {
+		fetch.setHeaders(headers[0].(map[string]string))
+	}
+	return fetch.Post(u, params)
+}
+
 // Payload 代理Post请求
 //  u       string                 网址
 //  params  map[string]interface{} 请求json数据
@@ -215,7 +231,6 @@ func Payload(u string, params map[string]interface{}, headers ...interface{}) ([
 
 // Post Post 数据
 //  u       string                 网址
-//  proxy   string                 代理网址 http://127.0.0.1:8080
 //  params  map[string]string      请求post数据
 //  headers map[string]string      可配置header在里面
 func (fetch *Fetch) Post(u string, params map[string]string, headers ...interface{}) (buf []byte, err error) {
