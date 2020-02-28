@@ -2,9 +2,11 @@ package fetch
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"io"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -309,6 +311,18 @@ func (fetch *Fetch) do(req *http.Request) (buf []byte, err error) {
 		return
 	}
 	defer resp.Body.Close()
-	buf, err = ioutil.ReadAll(resp.Body)
+
+	var reader io.ReadCloser
+	switch resp.Header.Get("Content-Encoding") {
+	case "gzip":
+		reader, err = gzip.NewReader(resp.Body)
+		if err != nil {
+			return
+		}
+		defer reader.Close()
+	default:
+		reader = resp.Body
+	}
+	buf, err = ioutil.ReadAll(reader)
 	return
 }
