@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
@@ -27,6 +28,7 @@ type Fetch struct {
 	client    *http.Client
 	headers   map[string]string
 	Timeout   time.Duration
+	Resp      *http.Response
 }
 
 type dialer struct {
@@ -327,5 +329,7 @@ func (fetch *Fetch) do(req *http.Request) (buf []byte, err error) {
 		reader = resp.Body
 	}
 	buf, err = ioutil.ReadAll(reader)
+
+	fetch.Resp = resp
 	return
 }
