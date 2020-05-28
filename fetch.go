@@ -8,13 +8,13 @@ import (
 	"encoding/json"
 	"io"
 	"io/ioutil"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
-	"github.com/xs23933/core"
 	"golang.org/x/net/proxy"
 )
 
@@ -88,7 +88,7 @@ func New(options ...interface{}) *Fetch {
 				}
 			case "headers":
 				fetch.setHeaders(v.(map[string]string))
-			case "Timeout":
+			case "Timeout", "timeout":
 				fetch.Timeout = v.(time.Duration)
 			}
 		}
@@ -102,7 +102,7 @@ func (fetch *Fetch) Get(u string, params ...interface{}) (buf []byte, err error)
 	addr := new(url.URL)
 	addr, err = url.Parse(u)
 	if err != nil {
-		core.Log(err.Error())
+		log.Println(err.Error())
 		return
 	}
 
@@ -137,6 +137,8 @@ func Get(u string, params ...interface{}) ([]byte, error) {
 	if len(params) > 0 {
 		for key, item := range params[0].(map[string]interface{}) {
 			switch key {
+			case "Timeout", "timeout":
+				fetch.Timeout = item.(time.Duration)
 			case "headers":
 				fetch.setHeaders(item.(map[string]string))
 			case "params":
@@ -240,7 +242,7 @@ func (fetch *Fetch) Post(u string, params map[string]string, headers ...interfac
 	addr := new(url.URL)
 	addr, err = url.Parse(u)
 	if err != nil {
-		core.Log(err.Error())
+		log.Println(err.Error())
 		return
 	}
 
@@ -270,13 +272,13 @@ func (fetch *Fetch) Payload(u string, params map[string]interface{}, headers ...
 	addr, err = url.Parse(u)
 	js := make([]byte, 0)
 	if err != nil {
-		core.Log(err.Error())
+		log.Println(err.Error())
 		return
 	}
 
 	js, err = json.Marshal(params)
 	if err != nil {
-		core.Log(err.Error())
+		log.Println(err.Error())
 		return
 	}
 
@@ -307,7 +309,7 @@ func (fetch *Fetch) do(req *http.Request) (buf []byte, err error) {
 	resp := new(http.Response)
 	resp, err = fetch.client.Do(req)
 	if err != nil {
-		// core.Log("Request failed %v", err)
+		// log.Println("Request failed %v", err)
 		return
 	}
 	defer resp.Body.Close()

@@ -1,9 +1,8 @@
 package fetch
 
 import (
+	"log"
 	"testing"
-
-	"github.com/xs23933/core"
 )
 
 func Test_Fetch(t *testing.T) {
@@ -21,7 +20,7 @@ func Test_Fetch(t *testing.T) {
 	if err != nil {
 		t.Errorf("%v", err.Error())
 	}
-	core.Log("%s", buf)
+	log.Println("%s", buf)
 	t.Error("")
 }
 
