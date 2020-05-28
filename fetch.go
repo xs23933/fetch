@@ -289,6 +289,7 @@ func (fetch *Fetch) Payload(u string, params map[string]interface{}, headers ...
 
 	param := bytes.NewBuffer(js)
 	req, err = http.NewRequest("POST", addr.String(), param)
+	req.Header.Add("Content-Type", "application/json")
 	buf, err = fetch.do(req)
 	return
 }
