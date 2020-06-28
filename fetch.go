@@ -97,6 +97,22 @@ func New(options ...interface{}) *Fetch {
 	return fetch
 }
 
+// SetProxy 设置代理.
+func (fetch *Fetch) SetProxy(proxy string) error {
+	proxy = strings.ToLower(proxy)
+	px, err := url.Parse(proxy)
+
+	if err == nil {
+		if px.Scheme == "http" {
+			fetch.Transport.Proxy = http.ProxyURL(px)
+		} else {
+			fetch.Transport = Socks5Proxy(px.Host)
+		}
+	}
+
+	return nil
+}
+
 // Get 获得数据
 func (fetch *Fetch) Get(u string, params ...interface{}) (buf []byte, err error) {
 	req := new(http.Request)
