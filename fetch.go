@@ -331,6 +331,7 @@ func (fetch *Fetch) do(req *http.Request) (buf []byte, err error) {
 		return
 	}
 	defer resp.Body.Close()
+	resp.Close = true
 
 	var reader io.ReadCloser
 	switch resp.Header.Get("Content-Encoding") {
@@ -344,6 +345,7 @@ func (fetch *Fetch) do(req *http.Request) (buf []byte, err error) {
 		reader = resp.Body
 	}
 	buf, err = ioutil.ReadAll(reader)
+	reader.Close()
 
 	fetch.Resp = resp
 	return
