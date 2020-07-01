@@ -6,7 +6,6 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
-	"io"
 	"io/ioutil"
 	"log"
 	"net"
@@ -27,7 +26,6 @@ type Fetch struct {
 	client    *http.Client
 	headers   map[string]string
 	Timeout   time.Duration
-	Resp      *http.Response
 }
 
 type dialer struct {
@@ -119,7 +117,6 @@ func (fetch *Fetch) Get(u string, params ...interface{}) (buf []byte, err error)
 	addr := new(url.URL)
 	addr, err = url.Parse(u)
 	if err != nil {
-		log.Println(err.Error())
 		return
 	}
 
@@ -323,9 +320,11 @@ func (fetch *Fetch) do(req *http.Request) (buf []byte, err error) {
 			Jar:       fetch.Jar,
 			Transport: fetch.Transport,
 		}
+	} else {
+		fetch.client.Transport = fetch.Transport
 	}
-	resp := new(http.Response)
-	resp, err = fetch.client.Do(req)
+	// spew.Dump(req)
+	resp, err := fetch.client.Do(req)
 	if err != nil {
 		// log.Println("Request failed %v", err)
 		return
@@ -333,20 +332,14 @@ func (fetch *Fetch) do(req *http.Request) (buf []byte, err error) {
 	defer resp.Body.Close()
 	resp.Close = true
 
-	var reader io.ReadCloser
-	switch resp.Header.Get("Content-Encoding") {
-	case "gzip":
-		reader, err = gzip.NewReader(resp.Body)
+	if resp.Header.Get("Content-Encoding") == "gzip" {
+		resp.Body, err = gzip.NewReader(resp.Body)
 		if err != nil {
 			return
 		}
-		defer reader.Close()
-	default:
-		reader = resp.Body
 	}
-	buf, err = ioutil.ReadAll(reader)
-	reader.Close()
 
-	fetch.Resp = resp
+	buf, err = ioutil.ReadAll(resp.Body)
+	resp.Body = ioutil.NopCloser(bytes.NewBuffer(buf))
 	return
 }
