@@ -26,6 +26,8 @@ type Fetch struct {
 	client    *http.Client
 	headers   map[string]string
 	Timeout   time.Duration
+	user      string
+	password  string
 }
 
 type dialer struct {
@@ -308,6 +310,12 @@ func (fetch *Fetch) Payload(u string, params map[string]interface{}, headers ...
 	return
 }
 
+// BasicAuth basic auth
+func (fetch *Fetch) BasicAuth(us, pw string) {
+	fetch.user = us
+	fetch.password = pw
+}
+
 func (fetch *Fetch) do(req *http.Request) (buf []byte, err error) {
 	req.Header.Set("User-Agent", fetch.UserAgent)
 	req.Header.Set("Accept-Language", "en")
@@ -323,7 +331,11 @@ func (fetch *Fetch) do(req *http.Request) (buf []byte, err error) {
 	} else {
 		fetch.client.Transport = fetch.Transport
 	}
-	// spew.Dump(req)
+	if len(fetch.user) > 0 && len(fetch.password) > 0 {
+		req.SetBasicAuth(fetch.user, fetch.password)
+		fetch.user = ""
+		fetch.password = ""
+	}
 	resp, err := fetch.client.Do(req)
 	if err != nil {
 		// log.Println("Request failed %v", err)
