@@ -146,6 +146,11 @@ func (fetch *Fetch) setHeaders(headers map[string]string) {
 	}
 }
 
+// SetHeaders 设置头信息
+func (fetch *Fetch) SetHeaders(headers map[string]string) {
+	fetch.setHeaders(headers)
+}
+
 // Get 获得数据
 func Get(u string, params ...interface{}) ([]byte, error) {
 	fetch := New()
