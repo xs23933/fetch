@@ -26,6 +26,8 @@ type Fetch struct {
 	client    *http.Client
 	headers   map[string]string
 	Timeout   time.Duration
+	user      string
+	password  string
 }
 
 type dialer struct {
@@ -144,6 +146,11 @@ func (fetch *Fetch) setHeaders(headers map[string]string) {
 	}
 }
 
+// SetHeaders 设置头信息
+func (fetch *Fetch) SetHeaders(headers map[string]string) {
+	fetch.setHeaders(headers)
+}
+
 // Get 获得数据
 func Get(u string, params ...interface{}) ([]byte, error) {
 	fetch := New()
@@ -239,7 +246,7 @@ func Post(u string, params map[string]string, headers ...interface{}) ([]byte, e
 //  u       string                 网址
 //  params  map[string]interface{} 请求json数据
 //  headers map[string]string      可配置header在里面
-func Payload(u string, params map[string]interface{}, headers ...interface{}) ([]byte, error) {
+func Payload(u string, params interface{}, headers ...interface{}) ([]byte, error) {
 	fetch := New()
 	if len(headers) > 0 {
 		fetch.setHeaders(headers[0].(map[string]string))
@@ -280,7 +287,7 @@ func (fetch *Fetch) Post(u string, params map[string]string, headers ...interfac
 //  u       string                 网址
 //  params  map[string]interface{} 请求json数据
 //  headers map[string]string      可配置header在里面
-func (fetch *Fetch) Payload(u string, params map[string]interface{}, headers ...interface{}) (buf []byte, err error) {
+func (fetch *Fetch) Payload(u string, params interface{}, headers ...interface{}) (buf []byte, err error) {
 	req := new(http.Request)
 	addr := new(url.URL)
 	addr, err = url.Parse(u)
@@ -308,6 +315,12 @@ func (fetch *Fetch) Payload(u string, params map[string]interface{}, headers ...
 	return
 }
 
+// BasicAuth basic auth
+func (fetch *Fetch) BasicAuth(us, pw string) {
+	fetch.user = us
+	fetch.password = pw
+}
+
 func (fetch *Fetch) do(req *http.Request) (buf []byte, err error) {
 	req.Header.Set("User-Agent", fetch.UserAgent)
 	req.Header.Set("Accept-Language", "en")
@@ -323,7 +336,11 @@ func (fetch *Fetch) do(req *http.Request) (buf []byte, err error) {
 	} else {
 		fetch.client.Transport = fetch.Transport
 	}
-	// spew.Dump(req)
+	if len(fetch.user) > 0 && len(fetch.password) > 0 {
+		req.SetBasicAuth(fetch.user, fetch.password)
+		fetch.user = ""
+		fetch.password = ""
+	}
 	resp, err := fetch.client.Do(req)
 	if err != nil {
 		// log.Println("Request failed %v", err)
