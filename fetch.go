@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/net/proxy"
@@ -115,9 +116,7 @@ func (fetch *Fetch) SetProxy(proxy string) error {
 
 // Get 获得数据
 func (fetch *Fetch) Get(u string, params ...interface{}) (buf []byte, err error) {
-	req := new(http.Request)
-	addr := new(url.URL)
-	addr, err = url.Parse(u)
+	addr, err := url.Parse(u)
 	if err != nil {
 		return
 	}
@@ -134,7 +133,7 @@ func (fetch *Fetch) Get(u string, params ...interface{}) (buf []byte, err error)
 		fetch.setHeaders(params[1].(map[string]string))
 	}
 
-	req, err = http.NewRequest("GET", addr.String(), nil)
+	req, _ := http.NewRequest("GET", addr.String(), nil)
 	buf, err = fetch.do(req)
 	return
 }
@@ -259,9 +258,7 @@ func Payload(u string, params interface{}, headers ...interface{}) ([]byte, erro
 //  params  map[string]string      请求post数据
 //  headers map[string]string      可配置header在里面
 func (fetch *Fetch) Post(u string, params map[string]string, headers ...interface{}) (buf []byte, err error) {
-	req := new(http.Request)
-	addr := new(url.URL)
-	addr, err = url.Parse(u)
+	addr, err := url.Parse(u)
 	if err != nil {
 		log.Println(err.Error())
 		return
@@ -277,10 +274,16 @@ func (fetch *Fetch) Post(u string, params map[string]string, headers ...interfac
 		fetch.setHeaders(headers[0].(map[string]string))
 	}
 
-	req, err = http.NewRequest("POST", addr.String(), strings.NewReader(form.Encode()))
+	req, _ := http.NewRequest("POST", addr.String(), strings.NewReader(form.Encode()))
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 	buf, err = fetch.do(req)
 	return
+}
+
+var paramPool = sync.Pool{
+	New: func() interface{} {
+		return &bytes.Buffer{}
+	},
 }
 
 // Payload payload 请求数据
@@ -288,16 +291,7 @@ func (fetch *Fetch) Post(u string, params map[string]string, headers ...interfac
 //  params  map[string]interface{} 请求json数据
 //  headers map[string]string      可配置header在里面
 func (fetch *Fetch) Payload(u string, params interface{}, headers ...interface{}) (buf []byte, err error) {
-	req := new(http.Request)
-	addr := new(url.URL)
-	addr, err = url.Parse(u)
-	js := make([]byte, 0)
-	if err != nil {
-		log.Println(err.Error())
-		return
-	}
-
-	js, err = json.Marshal(params)
+	addr, err := url.Parse(u)
 	if err != nil {
 		log.Println(err.Error())
 		return
@@ -308,8 +302,17 @@ func (fetch *Fetch) Payload(u string, params interface{}, headers ...interface{}
 		fetch.setHeaders(headers[0].(map[string]string))
 	}
 
-	param := bytes.NewBuffer(js)
-	req, err = http.NewRequest("POST", addr.String(), param)
+	param := paramPool.Get().(*bytes.Buffer)
+	defer paramPool.Put(param)
+	param.Reset()
+	if params != nil {
+		buf, err := json.Marshal(params)
+		if err != nil {
+			param.Write(buf)
+		}
+	}
+
+	req, _ := http.NewRequest("POST", addr.String(), param)
 	req.Header.Add("Content-Type", "application/json")
 	buf, err = fetch.do(req)
 	return
@@ -357,6 +360,5 @@ func (fetch *Fetch) do(req *http.Request) (buf []byte, err error) {
 	}
 
 	buf, err = ioutil.ReadAll(resp.Body)
-	resp.Body = ioutil.NopCloser(bytes.NewBuffer(buf))
 	return
 }
