@@ -61,7 +61,7 @@ func Socks5Proxy(addr string) *http.Transport {
 }
 
 // New New fetch
-func New(options ...interface{}) *Fetch {
+func New(options ...any) *Fetch {
 	jar := NewCookieJar()
 	fetch := &Fetch{
 		UserAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/68.0.3440.84 Safari/537.36",
@@ -75,7 +75,7 @@ func New(options ...interface{}) *Fetch {
 	}
 
 	if options != nil {
-		for k, v := range options[0].(map[string]interface{}) {
+		for k, v := range options[0].(map[string]any) {
 			switch k {
 			case "userAgent": // 配置UA
 				fetch.UserAgent = v.(string)
@@ -115,7 +115,7 @@ func (fetch *Fetch) SetProxy(proxy string) error {
 }
 
 // Get 获得数据
-func (fetch *Fetch) Get(u string, params ...interface{}) (buf []byte, err error) {
+func (fetch *Fetch) Get(u string, params ...any) (buf []byte, err error) {
 	addr, err := url.Parse(u)
 	if err != nil {
 		return
@@ -151,11 +151,11 @@ func (fetch *Fetch) SetHeaders(headers map[string]string) {
 }
 
 // Get 获得数据
-func Get(u string, params ...interface{}) ([]byte, error) {
+func Get(u string, params ...any) ([]byte, error) {
 	fetch := New()
 	query := make(map[string]string)
 	if len(params) > 0 {
-		for key, item := range params[0].(map[string]interface{}) {
+		for key, item := range params[0].(map[string]any) {
 			switch key {
 			case "Timeout", "timeout":
 				fetch.Timeout = item.(time.Duration)
@@ -173,8 +173,8 @@ func Get(u string, params ...interface{}) ([]byte, error) {
 //
 //	 u       string                 网址
 //	 proxy   string                 代理网址 http://127.0.0.1:8080
-//	 params  map[string]interface{} 这里面包含了 请求的 query数据 或 headers
-//	   e.g map[string]interface{} {
+//	 params  map[string]any 这里面包含了 请求的 query数据 或 headers
+//	   e.g map[string]any {
 //		         "params": map[string]string { // 如果有 query 参数就配置 params
 //					"key": "value",
 //				 },
@@ -182,13 +182,13 @@ func Get(u string, params ...interface{}) ([]byte, error) {
 //					"header": "value",
 //	          },
 //	       }
-func ProxyGet(u, proxy string, params ...interface{}) ([]byte, error) {
-	fetch := New(map[string]interface{}{
+func ProxyGet(u, proxy string, params ...any) ([]byte, error) {
+	fetch := New(map[string]any{
 		"proxy": proxy,
 	})
 	query := make(map[string]string)
 	if len(params) > 0 {
-		for key, item := range params[0].(map[string]interface{}) {
+		for key, item := range params[0].(map[string]any) {
 			switch key {
 			case "headers":
 				fetch.setHeaders(item.(map[string]string))
@@ -204,10 +204,10 @@ func ProxyGet(u, proxy string, params ...interface{}) ([]byte, error) {
 //
 //	u       string                 网址
 //	proxy   string                 代理网址 http://127.0.0.1:8080
-//	params  map[string]interface{} 请求json数据
+//	params  map[string]any 请求json数据
 //	headers map[string]string      可配置header在里面
-func ProxyPost(u, proxy string, params map[string]string, headers ...interface{}) ([]byte, error) {
-	fetch := New(map[string]interface{}{
+func ProxyPost(u, proxy string, params map[string]string, headers ...any) ([]byte, error) {
+	fetch := New(map[string]any{
 		"proxy": proxy,
 	})
 	if len(headers) > 0 {
@@ -220,10 +220,10 @@ func ProxyPost(u, proxy string, params map[string]string, headers ...interface{}
 //
 //	u       string                 网址
 //	proxy   string                 代理网址 http://127.0.0.1:8080
-//	params  map[string]interface{} 请求json数据
+//	params  map[string]any 请求json数据
 //	headers map[string]string      可配置header在里面
-func ProxyPayload(u, proxy string, params map[string]interface{}, headers ...interface{}) ([]byte, error) {
-	fetch := New(map[string]interface{}{
+func ProxyPayload(u, proxy string, params any, headers ...any) ([]byte, error) {
+	fetch := New(map[string]any{
 		"proxy": proxy,
 	})
 	if len(headers) > 0 {
@@ -235,10 +235,10 @@ func ProxyPayload(u, proxy string, params map[string]interface{}, headers ...int
 // Post 代理post
 //
 //	u       string                 网址
-//	params  map[string]interface{} 请求json数据
+//	params  map[string]any 请求json数据
 //	headers map[string]string      可配置header在里面
-func Post(u string, params map[string]string, headers ...interface{}) ([]byte, error) {
-	fetch := New(map[string]interface{}{})
+func Post(u string, params map[string]string, headers ...any) ([]byte, error) {
+	fetch := New(map[string]any{})
 	if len(headers) > 0 {
 		fetch.setHeaders(headers[0].(map[string]string))
 	}
@@ -248,9 +248,9 @@ func Post(u string, params map[string]string, headers ...interface{}) ([]byte, e
 // Payload 代理Post请求
 //
 //	u       string                 网址
-//	params  map[string]interface{} 请求json数据
+//	params  map[string]any 请求json数据
 //	headers map[string]string      可配置header在里面
-func Payload(u string, params interface{}, headers ...interface{}) ([]byte, error) {
+func Payload(u string, params any, headers ...any) ([]byte, error) {
 	fetch := New()
 	if len(headers) > 0 {
 		fetch.setHeaders(headers[0].(map[string]string))
@@ -263,7 +263,7 @@ func Payload(u string, params interface{}, headers ...interface{}) ([]byte, erro
 //	u       string                 网址
 //	params  map[string]string      请求post数据
 //	headers map[string]string      可配置header在里面
-func (fetch *Fetch) Post(u string, params map[string]string, headers ...interface{}) (buf []byte, err error) {
+func (fetch *Fetch) Post(u string, params map[string]string, headers ...any) (buf []byte, err error) {
 	addr, err := url.Parse(u)
 	if err != nil {
 		log.Println(err.Error())
@@ -287,7 +287,7 @@ func (fetch *Fetch) Post(u string, params map[string]string, headers ...interfac
 }
 
 var paramPool = sync.Pool{
-	New: func() interface{} {
+	New: func() any {
 		return &bytes.Buffer{}
 	},
 }
@@ -295,9 +295,9 @@ var paramPool = sync.Pool{
 // Payload payload 请求数据
 //
 //	u       string                 网址
-//	params  map[string]interface{} 请求json数据
+//	params  map[string]any 请求json数据
 //	headers map[string]string      可配置header在里面
-func (fetch *Fetch) Payload(u string, params interface{}, headers ...interface{}) (buf []byte, err error) {
+func (fetch *Fetch) Payload(u string, params any, headers ...any) (buf []byte, err error) {
 	addr, err := url.Parse(u)
 	if err != nil {
 		log.Println(err.Error())
