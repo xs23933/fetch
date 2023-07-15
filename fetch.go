@@ -170,17 +170,18 @@ func Get(u string, params ...interface{}) ([]byte, error) {
 }
 
 // ProxyGet 配置代理采集
-//  u       string                 网址
-//  proxy   string                 代理网址 http://127.0.0.1:8080
-//  params  map[string]interface{} 这里面包含了 请求的 query数据 或 headers
-//    e.g map[string]interface{} {
-//	         "params": map[string]string { // 如果有 query 参数就配置 params
-//				"key": "value",
-//			 },
-//           "headers" map[string]string { // 如果有 header 配置 headers
-//				"header": "value",
-//           },
-//        }
+//
+//	 u       string                 网址
+//	 proxy   string                 代理网址 http://127.0.0.1:8080
+//	 params  map[string]interface{} 这里面包含了 请求的 query数据 或 headers
+//	   e.g map[string]interface{} {
+//		         "params": map[string]string { // 如果有 query 参数就配置 params
+//					"key": "value",
+//				 },
+//	          "headers" map[string]string { // 如果有 header 配置 headers
+//					"header": "value",
+//	          },
+//	       }
 func ProxyGet(u, proxy string, params ...interface{}) ([]byte, error) {
 	fetch := New(map[string]interface{}{
 		"proxy": proxy,
@@ -200,10 +201,11 @@ func ProxyGet(u, proxy string, params ...interface{}) ([]byte, error) {
 }
 
 // ProxyPost 代理post
-//  u       string                 网址
-//  proxy   string                 代理网址 http://127.0.0.1:8080
-//  params  map[string]interface{} 请求json数据
-//  headers map[string]string      可配置header在里面
+//
+//	u       string                 网址
+//	proxy   string                 代理网址 http://127.0.0.1:8080
+//	params  map[string]interface{} 请求json数据
+//	headers map[string]string      可配置header在里面
 func ProxyPost(u, proxy string, params map[string]string, headers ...interface{}) ([]byte, error) {
 	fetch := New(map[string]interface{}{
 		"proxy": proxy,
@@ -215,10 +217,11 @@ func ProxyPost(u, proxy string, params map[string]string, headers ...interface{}
 }
 
 // ProxyPayload 代理Post请求
-//  u       string                 网址
-//  proxy   string                 代理网址 http://127.0.0.1:8080
-//  params  map[string]interface{} 请求json数据
-//  headers map[string]string      可配置header在里面
+//
+//	u       string                 网址
+//	proxy   string                 代理网址 http://127.0.0.1:8080
+//	params  map[string]interface{} 请求json数据
+//	headers map[string]string      可配置header在里面
 func ProxyPayload(u, proxy string, params map[string]interface{}, headers ...interface{}) ([]byte, error) {
 	fetch := New(map[string]interface{}{
 		"proxy": proxy,
@@ -230,9 +233,10 @@ func ProxyPayload(u, proxy string, params map[string]interface{}, headers ...int
 }
 
 // Post 代理post
-//  u       string                 网址
-//  params  map[string]interface{} 请求json数据
-//  headers map[string]string      可配置header在里面
+//
+//	u       string                 网址
+//	params  map[string]interface{} 请求json数据
+//	headers map[string]string      可配置header在里面
 func Post(u string, params map[string]string, headers ...interface{}) ([]byte, error) {
 	fetch := New(map[string]interface{}{})
 	if len(headers) > 0 {
@@ -242,9 +246,10 @@ func Post(u string, params map[string]string, headers ...interface{}) ([]byte, e
 }
 
 // Payload 代理Post请求
-//  u       string                 网址
-//  params  map[string]interface{} 请求json数据
-//  headers map[string]string      可配置header在里面
+//
+//	u       string                 网址
+//	params  map[string]interface{} 请求json数据
+//	headers map[string]string      可配置header在里面
 func Payload(u string, params interface{}, headers ...interface{}) ([]byte, error) {
 	fetch := New()
 	if len(headers) > 0 {
@@ -254,9 +259,10 @@ func Payload(u string, params interface{}, headers ...interface{}) ([]byte, erro
 }
 
 // Post Post 数据
-//  u       string                 网址
-//  params  map[string]string      请求post数据
-//  headers map[string]string      可配置header在里面
+//
+//	u       string                 网址
+//	params  map[string]string      请求post数据
+//	headers map[string]string      可配置header在里面
 func (fetch *Fetch) Post(u string, params map[string]string, headers ...interface{}) (buf []byte, err error) {
 	addr, err := url.Parse(u)
 	if err != nil {
@@ -287,9 +293,10 @@ var paramPool = sync.Pool{
 }
 
 // Payload payload 请求数据
-//  u       string                 网址
-//  params  map[string]interface{} 请求json数据
-//  headers map[string]string      可配置header在里面
+//
+//	u       string                 网址
+//	params  map[string]interface{} 请求json数据
+//	headers map[string]string      可配置header在里面
 func (fetch *Fetch) Payload(u string, params interface{}, headers ...interface{}) (buf []byte, err error) {
 	addr, err := url.Parse(u)
 	if err != nil {
@@ -307,11 +314,10 @@ func (fetch *Fetch) Payload(u string, params interface{}, headers ...interface{}
 	param.Reset()
 	if params != nil {
 		buf, err := json.Marshal(params)
-		if err != nil {
+		if err == nil {
 			param.Write(buf)
 		}
 	}
-
 	req, _ := http.NewRequest("POST", addr.String(), param)
 	req.Header.Add("Content-Type", "application/json")
 	buf, err = fetch.do(req)
