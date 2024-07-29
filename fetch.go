@@ -6,7 +6,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -115,7 +115,7 @@ func (fetch *Fetch) SetProxy(proxy string) error {
 }
 
 // Get 获得数据
-func (fetch *Fetch) Get(u string, params ...any) (buf []byte, err error) {
+func (fetch *Fetch) Get(u string, params ...any) (code int, buf []byte, err error) {
 	addr, err := url.Parse(u)
 	if err != nil {
 		return
@@ -134,7 +134,7 @@ func (fetch *Fetch) Get(u string, params ...any) (buf []byte, err error) {
 	}
 
 	req, _ := http.NewRequest("GET", addr.String(), nil)
-	buf, err = fetch.do(req)
+	code, buf, err = fetch.do(req)
 	return
 }
 
@@ -151,7 +151,7 @@ func (fetch *Fetch) SetHeaders(headers map[string]string) {
 }
 
 // Get 获得数据
-func Get(u string, params ...any) ([]byte, error) {
+func Get(u string, params ...any) (int, []byte, error) {
 	fetch := New()
 	query := make(map[string]string)
 	if len(params) > 0 {
@@ -182,7 +182,7 @@ func Get(u string, params ...any) ([]byte, error) {
 //					"header": "value",
 //	          },
 //	       }
-func ProxyGet(u, proxy string, params ...any) ([]byte, error) {
+func ProxyGet(u, proxy string, params ...any) (int, []byte, error) {
 	fetch := New(map[string]any{
 		"proxy": proxy,
 	})
@@ -206,7 +206,7 @@ func ProxyGet(u, proxy string, params ...any) ([]byte, error) {
 //	proxy   string                 代理网址 http://127.0.0.1:8080
 //	params  map[string]any 请求json数据
 //	headers map[string]string      可配置header在里面
-func ProxyPost(u, proxy string, params map[string]string, headers ...any) ([]byte, error) {
+func ProxyPost(u, proxy string, params map[string]string, headers ...any) (int, []byte, error) {
 	fetch := New(map[string]any{
 		"proxy": proxy,
 	})
@@ -222,7 +222,7 @@ func ProxyPost(u, proxy string, params map[string]string, headers ...any) ([]byt
 //	proxy   string                 代理网址 http://127.0.0.1:8080
 //	params  map[string]any 请求json数据
 //	headers map[string]string      可配置header在里面
-func ProxyPayload(u, proxy string, params any, headers ...any) ([]byte, error) {
+func ProxyPayload(u, proxy string, params any, headers ...any) (int, []byte, error) {
 	fetch := New(map[string]any{
 		"proxy": proxy,
 	})
@@ -237,7 +237,7 @@ func ProxyPayload(u, proxy string, params any, headers ...any) ([]byte, error) {
 //	u       string                 网址
 //	params  map[string]any 请求json数据
 //	headers map[string]string      可配置header在里面
-func Post(u string, params map[string]string, headers ...any) ([]byte, error) {
+func Post(u string, params map[string]string, headers ...any) (int, []byte, error) {
 	fetch := New(map[string]any{})
 	if len(headers) > 0 {
 		fetch.setHeaders(headers[0].(map[string]string))
@@ -250,7 +250,7 @@ func Post(u string, params map[string]string, headers ...any) ([]byte, error) {
 //	u       string                 网址
 //	params  map[string]any 请求json数据
 //	headers map[string]string      可配置header在里面
-func Payload(u string, params any, headers ...any) ([]byte, error) {
+func Payload(u string, params any, headers ...any) (int, []byte, error) {
 	fetch := New()
 	if len(headers) > 0 {
 		fetch.setHeaders(headers[0].(map[string]string))
@@ -263,7 +263,7 @@ func Payload(u string, params any, headers ...any) ([]byte, error) {
 //	u       string                 网址
 //	params  map[string]string      请求post数据
 //	headers map[string]string      可配置header在里面
-func (fetch *Fetch) Post(u string, params map[string]string, headers ...any) (buf []byte, err error) {
+func (fetch *Fetch) Post(u string, params map[string]string, headers ...any) (code int, buf []byte, err error) {
 	addr, err := url.Parse(u)
 	if err != nil {
 		log.Println(err.Error())
@@ -282,7 +282,7 @@ func (fetch *Fetch) Post(u string, params map[string]string, headers ...any) (bu
 
 	req, _ := http.NewRequest("POST", addr.String(), strings.NewReader(form.Encode()))
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-	buf, err = fetch.do(req)
+	code, buf, err = fetch.do(req)
 	return
 }
 
@@ -297,7 +297,7 @@ var paramPool = sync.Pool{
 //	u       string                 网址
 //	params  map[string]any 请求json数据
 //	headers map[string]string      可配置header在里面
-func (fetch *Fetch) Payload(u string, params any, headers ...any) (buf []byte, err error) {
+func (fetch *Fetch) Payload(u string, params any, headers ...any) (code int, buf []byte, err error) {
 	addr, err := url.Parse(u)
 	if err != nil {
 		log.Println(err.Error())
@@ -320,7 +320,7 @@ func (fetch *Fetch) Payload(u string, params any, headers ...any) (buf []byte, e
 	}
 	req, _ := http.NewRequest("POST", addr.String(), param)
 	req.Header.Add("Content-Type", "application/json")
-	buf, err = fetch.do(req)
+	code, buf, err = fetch.do(req)
 	return
 }
 
@@ -330,7 +330,7 @@ func (fetch *Fetch) BasicAuth(us, pw string) {
 	fetch.password = pw
 }
 
-func (fetch *Fetch) do(req *http.Request) (buf []byte, err error) {
+func (fetch *Fetch) do(req *http.Request) (code int, buf []byte, err error) {
 	req.Header.Set("User-Agent", fetch.UserAgent)
 	req.Header.Set("Accept-Language", "en")
 	for k, v := range fetch.headers { // 设置传入的 head
@@ -351,6 +351,7 @@ func (fetch *Fetch) do(req *http.Request) (buf []byte, err error) {
 		fetch.password = ""
 	}
 	resp, err := fetch.client.Do(req)
+	code = resp.StatusCode
 	if err != nil {
 		// log.Println("Request failed %v", err)
 		return
@@ -365,6 +366,6 @@ func (fetch *Fetch) do(req *http.Request) (buf []byte, err error) {
 		}
 	}
 
-	buf, err = ioutil.ReadAll(resp.Body)
+	buf, err = io.ReadAll(resp.Body)
 	return
 }

@@ -13,7 +13,7 @@ func Test_Fetch(t *testing.T) {
 		},
 	})
 
-	buf, err := w.Payload("https://hk.nt5.net/api/authorize", map[string]interface{}{
+	_, buf, err := w.Payload("https://hk.nt5.net/api/authorize", map[string]interface{}{
 		"user":     "admin",
 		"password": "admin",
 	})
@@ -25,7 +25,7 @@ func Test_Fetch(t *testing.T) {
 }
 
 func Test_Proxy(t *testing.T) {
-	buf, _ := ProxyPayload("https://hk.nt5.net/api/authorize", "http://127.0.0.1:8888", map[string]interface{}{
+	_, buf, _ := ProxyPayload("https://hk.nt5.net/api/authorize", "http://127.0.0.1:8888", map[string]interface{}{
 		"user":     "admin",
 		"password": "admin",
 	})
@@ -33,10 +33,11 @@ func Test_Proxy(t *testing.T) {
 }
 
 // Test_get 添加头信息的请求
-//   params 是请求参数
-//   headers 头信息
+//
+//	params 是请求参数
+//	headers 头信息
 func Test_get(t *testing.T) {
-	buf, err := Get("https://api.huixing.tech/check1", map[string]interface{}{
+	_, buf, err := Get("https://api.huixing.tech/check1", map[string]interface{}{
 		"params": map[string]string{
 			"hello": "world",
 		},
