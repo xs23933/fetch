@@ -5,7 +5,6 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/tls"
-	"encoding/json"
 	"io"
 	"log"
 	"net"
@@ -15,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bytedance/sonic"
 	"golang.org/x/net/proxy"
 )
 
@@ -313,9 +313,16 @@ func (fetch *Fetch) Payload(u string, params any, headers ...any) (code int, buf
 	defer paramPool.Put(param)
 	param.Reset()
 	if params != nil {
-		buf, err := json.Marshal(params)
-		if err == nil {
-			param.Write(buf)
+		switch v := params.(type) {
+		case string:
+			param.WriteString(v)
+		case []byte:
+			param.Write(v)
+		default:
+			buf, err := sonic.Marshal(v)
+			if err == nil {
+				param.Write(buf)
+			}
 		}
 	}
 	req, _ := http.NewRequest("POST", addr.String(), param)
