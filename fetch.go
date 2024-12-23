@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/tls"
+	"errors"
 	"io"
 	"log"
 	"net"
@@ -358,6 +359,9 @@ func (fetch *Fetch) do(req *http.Request) (code int, buf []byte, err error) {
 		fetch.password = ""
 	}
 	resp, err := fetch.client.Do(req)
+	if resp == nil {
+		return 500, nil, errors.New("network err or server invalid")
+	}
 	code = resp.StatusCode
 	if err != nil {
 		// log.Println("Request failed %v", err)
