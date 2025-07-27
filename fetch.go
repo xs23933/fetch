@@ -298,16 +298,23 @@ var paramPool = sync.Pool{
 //	u       string                 网址
 //	params  map[string]any 请求json数据
 //	headers map[string]string      可配置header在里面
-func (fetch *Fetch) Payload(u string, params any, headers ...any) (code int, buf []byte, err error) {
+func (fetch *Fetch) Payload(u string, params any, args ...any) (code int, buf []byte, err error) {
 	addr, err := url.Parse(u)
 	if err != nil {
 		log.Println(err.Error())
 		return
 	}
 
+	hook := func(buf []byte) {}
+
 	// 设置头信息
-	if headers != nil {
-		fetch.setHeaders(headers[0].(map[string]string))
+	for _, arg := range args {
+		switch v := arg.(type) {
+		case map[string]string:
+			fetch.setHeaders(v)
+		case func([]byte):
+			hook = v
+		}
 	}
 
 	param := paramPool.Get().(*bytes.Buffer)
@@ -326,6 +333,7 @@ func (fetch *Fetch) Payload(u string, params any, headers ...any) (code int, buf
 			}
 		}
 	}
+	hook(param.Bytes())
 	req, _ := http.NewRequest("POST", addr.String(), param)
 	req.Header.Add("Content-Type", "application/json")
 	code, buf, err = fetch.do(req)
