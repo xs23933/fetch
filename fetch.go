@@ -3,12 +3,10 @@ package fetch
 import (
 	"bytes"
 	"compress/gzip"
-	"context"
 	"crypto/tls"
 	"errors"
 	"io"
 	"log"
-	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -16,255 +14,147 @@ import (
 	"time"
 
 	"github.com/bytedance/sonic"
-	"golang.org/x/net/proxy"
 )
 
-// Fetch http client
 type Fetch struct {
-	Proxy     string
-	UserAgent string
-	Jar       http.CookieJar
-	Transport *http.Transport
-	client    *http.Client
-	headers   map[string]string
-	Timeout   time.Duration
-	user      string
-	password  string
+	client         *http.Client
+	Transport      *http.Transport
+	Timeout        time.Duration
+	Jar            http.CookieJar
+	UserAgent      string
+	mu             sync.RWMutex
+	headers        map[string]string // 每个 Fetch 实例自己的基础 headers
+	user           string
+	password       string
+	Header         http.Header // 最近一次响应的 headers
+	disableCookies bool        // 禁用 Cookie 同步
+	GlobalRespHook RespHook    // 全局统一响应 Hook
 }
 
-type dialer struct {
-	addr   string
-	socks5 proxy.Dialer
+func (fetch *Fetch) SetRespHook(hook RespHook) {
+	fetch.GlobalRespHook = hook
 }
 
-func (d *dialer) DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
-	return d.Dial(network, addr)
+func (fetch *Fetch) DisableCookies() {
+	fetch.disableCookies = true
 }
 
-func (d *dialer) Dial(network, addr string) (net.Conn, error) {
-	var err error
-	if d.socks5 == nil {
-		d.socks5, err = proxy.SOCKS5("tcp", d.addr, nil, proxy.Direct)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return d.socks5.Dial(network, addr)
-}
-
-func Socks5Proxy(addr string) *http.Transport {
-	d := &dialer{addr: addr}
-	return &http.Transport{
-		DialContext:       d.DialContext,
-		Dial:              d.Dial,
-		DisableKeepAlives: true,
-	}
-}
-
-// New New fetch
+// ===== Constructor =====
 func New(options ...any) *Fetch {
 	jar := NewCookieJar()
 	fetch := &Fetch{
-		UserAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/68.0.3440.84 Safari/537.36",
+		UserAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
 		Jar:       jar,
 		Transport: &http.Transport{
 			TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
 			DisableKeepAlives: true,
 		},
 		headers: make(map[string]string),
-		Timeout: 0,
+		Timeout: time.Second * 110,
 	}
 
-	if options != nil {
-		for k, v := range options[0].(map[string]any) {
-			switch k {
-			case "userAgent": // 配置UA
-				fetch.UserAgent = v.(string)
-			case "proxy": // 配置代理
-				proxy, err := url.Parse(v.(string))
-				if err == nil {
-					if proxy.Scheme == "http" {
-						fetch.Transport.Proxy = http.ProxyURL(proxy)
-					} else {
-						fetch.Transport = Socks5Proxy(proxy.Host)
+	if len(options) > 0 {
+		if opts, ok := options[0].(map[string]any); ok {
+			for k, v := range opts {
+				switch k {
+				case "userAgent":
+					fetch.UserAgent = v.(string)
+				case "proxy":
+					if px, err := url.Parse(v.(string)); err == nil {
+						if px.Scheme == "http" {
+							fetch.Transport.Proxy = http.ProxyURL(px)
+						} else {
+							fetch.Transport = Socks5Proxy(px.Host)
+						}
+					}
+				case "headers":
+					if hdrs, ok := v.(map[string]string); ok {
+						fetch.SetHeaders(hdrs)
+					}
+				case "Timeout", "timeout":
+					if t, ok := v.(time.Duration); ok {
+						fetch.Timeout = t
 					}
 				}
-			case "headers":
-				fetch.setHeaders(v.(map[string]string))
-			case "Timeout", "timeout":
-				fetch.Timeout = v.(time.Duration)
 			}
 		}
 	}
 	return fetch
 }
 
-// SetProxy 设置代理.
+// ===== Headers =====
+
+func (fetch *Fetch) SetHeaders(headers map[string]string) {
+	fetch.mu.Lock()
+	defer fetch.mu.Unlock()
+	for k, v := range headers {
+		fetch.headers[k] = v
+	}
+}
+
+func (fetch *Fetch) getBaseHeaders() map[string]string {
+	fetch.mu.RLock()
+	defer fetch.mu.RUnlock()
+	copyMap := make(map[string]string, len(fetch.headers))
+	for k, v := range fetch.headers {
+		copyMap[k] = v
+	}
+	return copyMap
+}
+
+func (fetch *Fetch) GetHeader(key string) string {
+	return fetch.Header.Get(key)
+}
+
+// ===== Proxy =====
 func (fetch *Fetch) SetProxy(proxy string) error {
 	proxy = strings.ToLower(proxy)
-	px, err := url.Parse(proxy)
-
-	if err == nil {
+	if px, err := url.Parse(proxy); err == nil {
 		if px.Scheme == "http" {
 			fetch.Transport.Proxy = http.ProxyURL(px)
 		} else {
 			fetch.Transport = Socks5Proxy(px.Host)
 		}
+		return nil
+	} else {
+		return err
 	}
-
-	return nil
 }
 
-// Get 获得数据
+// ===== GET =====
 func (fetch *Fetch) Get(u string, params ...any) (code int, buf []byte, err error) {
 	addr, err := url.Parse(u)
 	if err != nil {
 		return
 	}
 
-	if params != nil {
-		q := addr.Query()
-		for k, v := range params[0].(map[string]string) {
-			q.Set(k, v)
+	skippedFirstMap := false
+	for i, p := range params {
+		if m, ok := p.(map[string]string); ok {
+			q := addr.Query()
+			for k, v := range m {
+				q.Set(k, v)
+			}
+			addr.RawQuery = q.Encode()
+			skippedFirstMap = true
+			// 把剩余参数原样传下去
+			var extra []any
+			extra = append(extra, params[:i]...)
+			extra = append(extra, params[i+1:]...)
+			req, _ := http.NewRequest("GET", addr.String(), nil)
+			return fetch.do(req, extra...)
 		}
-		addr.RawQuery = q.Encode()
 	}
-
-	if len(params) > 1 {
-		fetch.setHeaders(params[1].(map[string]string))
-	}
-
+	// 没传 query 的情况，直接透传所有额外参数
 	req, _ := http.NewRequest("GET", addr.String(), nil)
-	code, buf, err = fetch.do(req)
-	return
-}
-
-// setHeaders 设置 header
-func (fetch *Fetch) setHeaders(headers map[string]string) {
-	for k, v := range headers {
-		fetch.headers[k] = v
+	if !skippedFirstMap && len(params) > 0 {
+		return fetch.do(req, params...)
 	}
+	return fetch.do(req)
 }
 
-// SetHeaders 设置头信息
-func (fetch *Fetch) SetHeaders(headers map[string]string) {
-	fetch.setHeaders(headers)
-}
-
-// Get 获得数据
-func Get(u string, params ...any) (int, []byte, error) {
-	fetch := New()
-	query := make(map[string]string)
-	if len(params) > 0 {
-		for key, item := range params[0].(map[string]any) {
-			switch key {
-			case "Timeout", "timeout":
-				fetch.Timeout = item.(time.Duration)
-			case "headers":
-				fetch.setHeaders(item.(map[string]string))
-			case "params":
-				query = item.(map[string]string)
-			}
-		}
-	}
-	return fetch.Get(u, query)
-}
-
-// ProxyGet 配置代理采集
-//
-//	 u       string                 网址
-//	 proxy   string                 代理网址 http://127.0.0.1:8080
-//	 params  map[string]any 这里面包含了 请求的 query数据 或 headers
-//	   e.g map[string]any {
-//		         "params": map[string]string { // 如果有 query 参数就配置 params
-//					"key": "value",
-//				 },
-//	          "headers" map[string]string { // 如果有 header 配置 headers
-//					"header": "value",
-//	          },
-//	       }
-func ProxyGet(u, proxy string, params ...any) (int, []byte, error) {
-	fetch := New(map[string]any{
-		"proxy": proxy,
-	})
-	query := make(map[string]string)
-	if len(params) > 0 {
-		for key, item := range params[0].(map[string]any) {
-			switch key {
-			case "headers":
-				fetch.setHeaders(item.(map[string]string))
-			case "params":
-				query = item.(map[string]string)
-			}
-		}
-	}
-	return fetch.Get(u, query)
-}
-
-// ProxyPost 代理post
-//
-//	u       string                 网址
-//	proxy   string                 代理网址 http://127.0.0.1:8080
-//	params  map[string]any 请求json数据
-//	headers map[string]string      可配置header在里面
-func ProxyPost(u, proxy string, params map[string]string, headers ...any) (int, []byte, error) {
-	fetch := New(map[string]any{
-		"proxy": proxy,
-	})
-	if len(headers) > 0 {
-		fetch.setHeaders(headers[0].(map[string]string))
-	}
-	return fetch.Post(u, params)
-}
-
-// ProxyPayload 代理Post请求
-//
-//	u       string                 网址
-//	proxy   string                 代理网址 http://127.0.0.1:8080
-//	params  map[string]any 请求json数据
-//	headers map[string]string      可配置header在里面
-func ProxyPayload(u, proxy string, params any, headers ...any) (int, []byte, error) {
-	fetch := New(map[string]any{
-		"proxy": proxy,
-	})
-	if len(headers) > 0 {
-		fetch.setHeaders(headers[0].(map[string]string))
-	}
-	return fetch.Payload(u, params)
-}
-
-// Post 代理post
-//
-//	u       string                 网址
-//	params  map[string]any 请求json数据
-//	headers map[string]string      可配置header在里面
-func Post(u string, params map[string]string, headers ...any) (int, []byte, error) {
-	fetch := New(map[string]any{})
-	if len(headers) > 0 {
-		fetch.setHeaders(headers[0].(map[string]string))
-	}
-	return fetch.Post(u, params)
-}
-
-// Payload 代理Post请求
-//
-//	u       string                 网址
-//	params  map[string]any 请求json数据
-//	headers map[string]string      可配置header在里面
-func Payload(u string, params any, headers ...any) (int, []byte, error) {
-	fetch := New()
-	if len(headers) > 0 {
-		fetch.setHeaders(headers[0].(map[string]string))
-	}
-	return fetch.Payload(u, params)
-}
-
-// Post Post 数据
-//
-//	u       string                 网址
-//	params  map[string]string      请求post数据
-//	headers map[string]string      可配置header在里面
-func (fetch *Fetch) Post(u string, params map[string]string, headers ...any) (code int, buf []byte, err error) {
+// ===== POST =====
+func (fetch *Fetch) Post(u string, params map[string]string, args ...any) (code int, buf []byte, err error) {
 	addr, err := url.Parse(u)
 	if err != nil {
 		log.Println(err.Error())
@@ -276,28 +166,14 @@ func (fetch *Fetch) Post(u string, params map[string]string, headers ...any) (co
 		form.Add(k, v)
 	}
 
-	// 设置头信息
-	if headers != nil {
-		fetch.setHeaders(headers[0].(map[string]string))
-	}
-
 	req, _ := http.NewRequest("POST", addr.String(), strings.NewReader(form.Encode()))
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-	code, buf, err = fetch.do(req)
-	return
+	return fetch.do(req, args...)
 }
 
-var paramPool = sync.Pool{
-	New: func() any {
-		return &bytes.Buffer{}
-	},
-}
+// ===== Payload (JSON POST) =====
+var paramPool = sync.Pool{New: func() any { return &bytes.Buffer{} }}
 
-// Payload payload 请求数据
-//
-//	u       string                 网址
-//	params  map[string]any 请求json数据
-//	headers map[string]string      可配置header在里面
 func (fetch *Fetch) Payload(u string, params any, args ...any) (code int, buf []byte, err error) {
 	addr, err := url.Parse(u)
 	if err != nil {
@@ -305,21 +181,10 @@ func (fetch *Fetch) Payload(u string, params any, args ...any) (code int, buf []
 		return
 	}
 
-	hook := func(buf []byte) {}
-
-	// 设置头信息
-	for _, arg := range args {
-		switch v := arg.(type) {
-		case map[string]string:
-			fetch.setHeaders(v)
-		case func([]byte):
-			hook = v
-		}
-	}
-
 	param := paramPool.Get().(*bytes.Buffer)
 	defer paramPool.Put(param)
 	param.Reset()
+
 	if params != nil {
 		switch v := params.(type) {
 		case string:
@@ -327,31 +192,68 @@ func (fetch *Fetch) Payload(u string, params any, args ...any) (code int, buf []
 		case []byte:
 			param.Write(v)
 		default:
-			buf, err := sonic.Marshal(v)
-			if err == nil {
-				param.Write(buf)
+			if b, e := sonic.Marshal(v); e == nil {
+				param.Write(b)
 			}
 		}
 	}
-	hook(param.Bytes())
 	req, _ := http.NewRequest("POST", addr.String(), param)
-	req.Header.Add("Content-Type", "application/json")
-	code, buf, err = fetch.do(req)
-	return
+	req.Header.Add("Content-Type", "application/json; charset=utf-8")
+	return fetch.do(req, args...)
 }
 
-// BasicAuth basic auth
+// ===== BasicAuth =====
 func (fetch *Fetch) BasicAuth(us, pw string) {
 	fetch.user = us
 	fetch.password = pw
 }
 
-func (fetch *Fetch) do(req *http.Request) (code int, buf []byte, err error) {
+// ===== Core HTTP Do =====
+func (fetch *Fetch) do(req *http.Request, args ...any) (code int, buf []byte, err error) {
+	var reqHook ReqHook = defaultReqHook
+	var respHook RespHook = defaultResHook
+
+	tempHeaders := make(map[string]string)
+	noCookie := false
+	for _, arg := range args {
+		switch v := arg.(type) {
+		case ReqHook:
+			reqHook = v
+		case RespHook:
+			respHook = v
+		case func(*http.Request, []byte):
+			reqHook = v
+		case func(int, []byte, error) ([]byte, error):
+			respHook = v
+		case map[string]string:
+			for k, val := range v {
+				if strings.ToLower(k) == "__nocookie__" && strings.ToLower(val) == "true" {
+					noCookie = true
+					continue
+				}
+				tempHeaders[k] = val
+			}
+		}
+	}
+
+	wrappedRespHook := func(code int, body []byte, err error) ([]byte, error) {
+		b, e := respHook(code, body, err)
+		if fetch.GlobalRespHook != nil {
+			return fetch.GlobalRespHook(code, b, e)
+		}
+		return b, e
+	}
+
 	req.Header.Set("User-Agent", fetch.UserAgent)
 	req.Header.Set("Accept-Language", "en")
-	for k, v := range fetch.headers { // 设置传入的 head
+	// 合并 headers
+	for k, v := range fetch.getBaseHeaders() {
 		req.Header.Set(k, v)
 	}
+	for k, v := range tempHeaders {
+		req.Header.Set(k, v)
+	}
+
 	if fetch.client == nil {
 		fetch.client = &http.Client{
 			Timeout:   fetch.Timeout,
@@ -361,30 +263,110 @@ func (fetch *Fetch) do(req *http.Request) (code int, buf []byte, err error) {
 	} else {
 		fetch.client.Transport = fetch.Transport
 	}
+
+	// 如果禁用 Cookie，同步一个空 Jar
+	if fetch.disableCookies || noCookie {
+		fetch.client.Jar = NewCookieJar() // 新建空的 CookieJar
+	} else {
+		fetch.client.Jar = fetch.Jar
+	}
+
 	if len(fetch.user) > 0 && len(fetch.password) > 0 {
 		req.SetBasicAuth(fetch.user, fetch.password)
-		fetch.user = ""
-		fetch.password = ""
+		fetch.user, fetch.password = "", ""
 	}
-	resp, err := fetch.client.Do(req)
-	if resp == nil {
-		return 500, nil, errors.New("network err or server invalid")
-	}
-	code = resp.StatusCode
-	if err != nil {
-		// log.Println("Request failed %v", err)
-		return
-	}
-	defer resp.Body.Close()
-	resp.Close = true
 
-	if resp.Header.Get("Content-Encoding") == "gzip" {
-		resp.Body, err = gzip.NewReader(resp.Body)
-		if err != nil {
-			return
+	// 读取原始 body 供 reqHook 使用，并保存以便重试时复位
+	var savedBody []byte
+	if req.Body != nil {
+		savedBody, _ = io.ReadAll(req.Body)
+		// 调用 reqHook（可添加签名头等），随后恢复 body（如果 hook 想自定义 body，也可在 hook 里自行设置 req.Body）
+		reqHook(req, savedBody)
+		// 如果 hook 没改 body，这里恢复原始；若 hook 改了 body，也不会影响我们再次设置 —— 因为我们需要保证请求可重试
+	}
+	// 重试前置：构造一个函数在每次 attempt 之前复位 body
+	resetBody := func() {
+		if savedBody != nil {
+			req.Body = io.NopCloser(bytes.NewReader(savedBody))
+		} else {
+			req.Body = nil
 		}
 	}
 
-	buf, err = io.ReadAll(resp.Body)
-	return
+	maxAttempts := 3 // 默认最多3次尝试
+	var lastErr error
+	for attempt := 0; attempt <= maxAttempts; attempt++ {
+		// 每次尝试前复位 body
+		resetBody()
+
+		resp, e := fetch.client.Do(req)
+
+		if e != nil {
+			e = unwrapNetError(e) // 统一处理
+			lastErr = e
+			if shouldRetry(e) && attempt < maxAttempts {
+				// core.Info("retrying request: %s", e.Error())
+				time.Sleep(500 * time.Millisecond)
+				continue
+			}
+			buf, e = wrappedRespHook(code, nil, e)
+			return 0, buf, e
+		}
+		if resp == nil {
+			lastErr = errors.New("network err or server invalid")
+			buf, err = wrappedRespHook(code, nil, lastErr)
+			return 0, buf, err
+		}
+
+		code = resp.StatusCode
+		fetch.Header = resp.Header
+
+		// 读取响应（支持 gzip）
+		var reader io.Reader = resp.Body
+
+		if resp.Header.Get("Content-Encoding") == "gzip" {
+			gr, ge := gzip.NewReader(resp.Body)
+			if ge != nil {
+				buf, ge = wrappedRespHook(code, nil, ge)
+				return code, buf, ge
+			}
+			defer gr.Close()
+			reader = gr
+		}
+		defer resp.Body.Close()
+
+		buf, err = io.ReadAll(reader)
+
+		// 响应 Hook
+		buf, err = wrappedRespHook(code, buf, err)
+		return code, buf, err
+	}
+
+	// 如果所有尝试都失败
+	buf, err = wrappedRespHook(0, nil, lastErr)
+	return code, buf, err
 }
+
+// ===== 统一解开 *url.Error 等底层错误 =====
+func unwrapNetError(err error) error {
+	if err == nil {
+		return nil
+	}
+	var ue *url.Error
+	if errors.As(err, &ue) {
+		return ue.Err // 只返回底层网络错误
+	}
+	return err
+}
+
+// ReqHook：可读取请求体，并直接改写 req 的 Header（甚至可自行替换 req.Body）
+type ReqHook func(req *http.Request, body []byte)
+
+// RespHook：可基于状态码和响应体做变换（如 AES 解密），返回的新字节将作为最终返回值
+type RespHook func(code int, body []byte, err error) ([]byte, error)
+
+// 计算请求体 SHA256 并写入自定义头
+var defaultReqHook ReqHook = func(req *http.Request, body []byte) {}
+
+// 响应解密（可选）
+var defaultResHook RespHook = func(code int, b []byte, err error) ([]byte, error) { return b, err }
