@@ -295,7 +295,7 @@ func (fetch *Fetch) do(req *http.Request, args ...any) (code int, buf []byte, er
 
 	maxAttempts := 3 // 默认最多3次尝试
 	var lastErr error
-	for attempt := 0; attempt <= maxAttempts; attempt++ {
+	for attempt := range maxAttempts {
 		// 每次尝试前复位 body
 		resetBody()
 
@@ -305,14 +305,21 @@ func (fetch *Fetch) do(req *http.Request, args ...any) (code int, buf []byte, er
 			e = unwrapNetError(e) // 统一处理
 			lastErr = e
 			if shouldRetry(e) && attempt < maxAttempts {
-				// core.Info("retrying request: %s", e.Error())
-				time.Sleep(500 * time.Millisecond)
+				duration := 200 * time.Duration(1<<attempt+1) * time.Millisecond
+				// core.Erro("%s 后重新尝试[%d/%d]: %s", duration, attempt+1, maxAttempts, e.Error())
+				time.Sleep(duration)
 				continue
 			}
 			buf, e = wrappedRespHook(code, nil, e)
 			return 0, buf, e
 		}
 		if resp == nil {
+			if attempt < maxAttempts {
+				duration := 200 * time.Duration(1<<attempt+1) * time.Millisecond
+				// core.Erro("%s 后重新尝试[%d/%d]: [%s] resp is null", duration, attempt+1, maxAttempts, resp)
+				time.Sleep(duration)
+				continue
+			}
 			lastErr = errors.New("network err or server invalid")
 			buf, err = wrappedRespHook(code, nil, lastErr)
 			return 0, buf, err
@@ -339,6 +346,9 @@ func (fetch *Fetch) do(req *http.Request, args ...any) (code int, buf []byte, er
 
 		// 响应 Hook
 		buf, err = wrappedRespHook(code, buf, err)
+		// if attempt > 0 {
+		// core.Info("%d/%d 次重新尝试成功(code=%d)", attempt, maxAttempts, code)
+		// }
 		return code, buf, err
 	}
 

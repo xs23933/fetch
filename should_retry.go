@@ -49,18 +49,6 @@ func shouldRetry(err error) bool {
 	}
 	// 5. 检查错误消息中的特定模式 (作为后备方案)
 	msg := strings.ToLower(err.Error())
-	retryPatterns := []string{
-		"connection refused",
-		"Bad Gateway",
-		"connection reset by peer",
-		"broken pipe",
-		"unexpected eof",
-		"i/o timeout",
-		"no such host",
-		"tls: handshake failure",           // 某些TLS握手错误可以重试
-		"use of closed network connection", // 连接已关闭
-		"server misbehaving",               // DNS错误
-	}
 
 	for _, pattern := range retryPatterns {
 		if strings.Contains(msg, pattern) {
@@ -70,3 +58,20 @@ func shouldRetry(err error) bool {
 
 	return false
 }
+
+var (
+	retryPatterns = []string{
+		"connection refused",
+		"bad gateway",
+		"stream timeout",
+		"connection reset by peer",
+		"broken pipe",
+		"unexpected eof",
+		"upstream connect error or discon",
+		"i/o timeout",
+		"no such host",
+		"tls: handshake failure",           // 某些TLS握手错误可以重试
+		"use of closed network connection", // 连接已关闭
+		"server misbehaving",               // DNS错误
+	}
+)
