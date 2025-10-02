@@ -153,6 +153,38 @@ func (fetch *Fetch) Get(u string, params ...any) (code int, buf []byte, err erro
 	return fetch.do(req)
 }
 
+// ===== Delete =====
+func (fetch *Fetch) Del(u string, params ...any) (code int, buf []byte, err error) {
+	addr, err := url.Parse(u)
+	if err != nil {
+		return
+	}
+
+	skippedFirstMap := false
+	for i, p := range params {
+		if m, ok := p.(map[string]string); ok {
+			q := addr.Query()
+			for k, v := range m {
+				q.Set(k, v)
+			}
+			addr.RawQuery = q.Encode()
+			skippedFirstMap = true
+			// 把剩余参数原样传下去
+			var extra []any
+			extra = append(extra, params[:i]...)
+			extra = append(extra, params[i+1:]...)
+			req, _ := http.NewRequest("DELETE", addr.String(), nil)
+			return fetch.do(req, extra...)
+		}
+	}
+	// 没传 query 的情况，直接透传所有额外参数
+	req, _ := http.NewRequest("DELETE", addr.String(), nil)
+	if !skippedFirstMap && len(params) > 0 {
+		return fetch.do(req, params...)
+	}
+	return fetch.do(req)
+}
+
 // ===== POST =====
 func (fetch *Fetch) Post(u string, params map[string]string, args ...any) (code int, buf []byte, err error) {
 	addr, err := url.Parse(u)
